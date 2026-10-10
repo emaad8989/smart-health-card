@@ -10,8 +10,20 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(
     title="Smart Health Card API",
     description="Backend for the QR-based patient health record system (prototype, synthetic data only).",
-    version="0.2.0",
+    version="0.3.0",
 )
+
+
+def find_patient(db: Session, patient_id: str) -> models.Patient:
+    """Look up a patient by ID like PAT001, or raise a 404 error."""
+    patient = (
+        db.query(models.Patient)
+        .filter(models.Patient.patient_id == patient_id.strip().upper())
+        .first()
+    )
+    if patient is None:
+        raise HTTPException(status_code=404, detail=f"Patient {patient_id} not found")
+    return patient
 
 
 @app.get("/health")
@@ -21,11 +33,26 @@ def health_check():
 
 @app.get("/patients/{patient_id}", response_model=schemas.PatientOut)
 def get_patient(patient_id: str, db: Session = Depends(get_db)):
-    patient = (
-        db.query(models.Patient)
-        .filter(models.Patient.patient_id == patient_id.strip().upper())
-        .first()
+    return find_patient(db, patient_id)
+
+
+@app.post(
+    "/patients/{patient_id}/consultations",
+    response_model=schemas.ConsultationOut,
+    status_code=201,
+)
+def add_consultation(
+    patient_id: str,
+    consultation: schemas.ConsultationCreate,
+    db: Session = Depends(get_db),
+):
+    patient = find_patient(db, patient_id)
+
+    new_consultation = models.Consultation(
+        patient_pk=patient.id,
+        **consultation.model_dump(),
     )
-    if patient is None:
-        raise HTTPException(status_code=404, detail=f"Patient {patient_id} not found")
-    return patient
+    db.add(new_consultation)
+    db.commit()
+    db.refresh(new_consultation)
+    return new_consultation
