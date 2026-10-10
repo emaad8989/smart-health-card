@@ -1,4 +1,5 @@
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from app import models, schemas
@@ -10,7 +11,20 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(
     title="Smart Health Card API",
     description="Backend for the QR-based patient health record system (prototype, synthetic data only).",
-    version="0.3.0",
+    version="0.4.0",
+)
+
+# Frontend addresses that are allowed to call this API (Vite's default port is 5173).
+ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
 )
 
 
