@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Patient Profile</title>
+  <script src="config.js"></script>
+  <style>
+    body { font-family: Arial; background: #eef5f9; margin: 0; }
+    .top { background: #1a6e8e; color: white; padding: 15px 25px; display: flex; justify-content: space-between; align-items: center; }
+    .top a { color: white; text-decoration: none; background: rgba(255,255,255,0.2); padding: 6px 12px; border-radius: 5px; }
+    .content { max-width: 450px; margin: 25px auto; padding: 0 15px; }
+    .card { background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+    h3 { margin-top: 0; color: #1a6e8e; }
+    .row { padding: 5px 0; font-size: 15px; }
+    .visit { border-left: 4px solid #1a6e8e; padding: 8px 12px; margin-bottom: 12px; background: #f5fafc; }
+    .date { font-size: 13px; color: #666; }
+    button { width: 100%; padding: 10px; background: #2e9e5b; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
+    .gray { background: #777; margin-top: 8px; }
+    .error { background: #fde8e8; color: #a31c1c; padding: 15px; border-radius: 10px; text-align: center; }
+    .ok { background: #e3f6e8; color: #1c6b34; padding: 10px; border-radius: 8px; text-align: center; margin-bottom: 15px; }
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 12px; font-weight: bold; font-size: 14px; }
+    .danger { background: #d62828; color: white; }
+    .safe { background: #e3f6e8; color: #1c6b34; }
+    .empty { text-align: center; color: #777; padding: 15px 0; }
+    label { display: block; margin-top: 12px; font-size: 14px; }
+    input, textarea { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; font-family: Arial; font-size: 14px; }
+    #formBox { display: none; }
+    #formMessage { margin-top: 12px; }
+  </style>
+</head>
+<body>
+
+  <div class="top">
+    <b>Patient Profile</b>
+    <a href="dashboard.html">Back</a>
+  </div>
+
+  <div class="content" id="page">Loading...</div>
+
+  <script>
+    var page = document.getElementById("page");
+    var id = new URLSearchParams(window.location.search).get("id");
+    id = id ? id.trim().toUpperCase() : "";
+    var flash = "";   // "Saved" message dikhane ke liye
+
+    // Backend ka text page par dikhane se pehle safe banata hai
+    function esc(t) {
+      var d = document.createElement("div");
+      d.textContent = (t === null || t === undefined) ? "" : t;
+      return d.innerHTML;
+    }
+
+    function showError(title, text) {
+      page.innerHTML = "<div class='error'><b>" + esc(title) + "</b><br>" + esc(text) + "</div>";
+    }
+
+    function niceDate(iso) {
+      var d = new Date(iso);
+      return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+    }
+
+    function loadPatient() {
+      fetch(API + "/patients/" + encodeURIComponent(id))
+        .then(function (res) {
+          if (res.status === 404) {
+            showError("Patient not found", "No patient has the ID: " + id);
+            return null;
+          }
+          if (!res.ok) {
+            showError("Something went wrong", "Server error " + res.status);
+            return null;
+          }
+          return res.json();
+        })
+        .then(function (p) { if (p) { showPatient(p); } })
+        .catch(function () {
+          showError("Cannot reach server", "The backend is not running. Start it and refresh this page.");
+        });
+    }
+
+    function showPatient(p) {
+      var html = "";
+
+      if (flash) { html += "<div class='ok'>" + esc(flash) + "</div>"; flash = ""; }
+
+      // Allergies: laal badge (khatarnak), hara sirf jab exactly "none" ya "none known"
+      var allergy = (p.allergies || "").trim();
+      var lower = allergy.toLowerCase();
+      var noAllergy = (lower === "" || lower === "none" || lower === "none known" || lower === "nil");
+      if (allergy === "") { allergy = "None known"; }
+      var badgeClass = noAllergy ? "safe" : "danger";
+      var badgeText = noAllergy ? esc(allergy) : "&#9888; " + esc(allergy);
+
+      html += "<div class='card'>";
+      html += "<h3>" + esc(p.full_name) + " (" + esc(p.patient_id) + ")</h3>";
+      html += "<div class='row'><b>Date of Birth:</b> " + esc(p.date_of_birth) + "</div>";
+      html += "<div class='row'><b>Gender:</b> " + esc(p.gender) + "</div>";
+      html += "<div class='row'><b>Blood Group:</b> " + esc(p.blood_group) + "</div>";
+      html += "<div class='row'><b>Allergies:</b> <span class='badge " + badgeClass + "'>" + badgeText + "</span></div>";
+      html += "<div class='row'><b>Medical Conditions:</b> " + esc(p.medical_conditions || "None") + "</div>";
+      html += "</div>";
+
+      // Nayi consultation ka form
+      html += "<button id='openForm'>+ New Consultation</button><br><br>";
+      html += "<div class='card' id='formBox'>";
+      html += "<h3>New Consultation</h3>";
+      html += "<form id='consultForm'>";
+      html += "<label>Doctor Name *</label><input type='text' id='f_doctor_name'>";
+      html += "<label>Symptoms *</label><textarea id='f_symptoms' rows='2'></textarea>";
+      html += "<label>Diagnosis *</label><textarea id='f_diagnosis' rows='2'></textarea>";
+      html += "<label>Prescription</label><textarea id='f_prescription' rows='2'></textarea>";
+      html += "<label>Notes</label><textarea id='f_notes' rows='2'></textarea>";
+      html += "<button type='submit' style='margin-top:15px'>Save Consultation</button>";
+      html += "<button type='button' class='gray' id='cancelForm'>Cancel</button>";
+      html += "</form>";
+      html += "<div id='formMessage'></div>";
+      html += "</div>";
+
+      // Purani visits (newest first, backend already sorts)
+      html += "<div class='card'><h3>Medical History</h3>";
+      if (p.consultations.length === 0) {
+        html += "<div class='empty'>No consultations yet</div>";
+      }
+      for (var i = 0; i < p.consultations.length; i++) {
+        var v = p.consultations[i];
+        html += "<div class='visit'>";
+        html += "<div class='date'>" + esc(niceDate(v.consultation_date)) + " &bull; " + esc(v.doctor_name) + "</div>";
+        html += "<b>Symptoms:</b> " + esc(v.symptoms) + "<br>";
+        html += "<b>Diagnosis:</b> " + esc(v.diagnosis) + "<br>";
+        if (v.prescription) { html += "<b>Prescription:</b> " + esc(v.prescription) + "<br>"; }
+        if (v.notes) { html += "<b>Notes:</b> " + esc(v.notes); }
+        html += "</div>";
+      }
+      html += "</div>";
+
+      page.innerHTML = html;
+
+      document.getElementById("openForm").onclick = function () {
+        document.getElementById("formBox").style.display = "block";
+        document.getElementById("openForm").style.display = "none";
+      };
+      document.getElementById("cancelForm").onclick = function () {
+        document.getElementById("formBox").style.display = "none";
+        document.getElementById("openForm").style.display = "block";
+      };
+      document.getElementById("consultForm").addEventListener("submit", saveConsultation);
+    }
+
+        function formError(text) {
+      var box = document.getElementById("formMessage");
+      box.innerHTML = "<div class='error'>" + text + "</div>";
+      box.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    function saveConsultation(event) {
+      event.preventDefault();
+
+      var data = {
+        doctor_name: document.getElementById("f_doctor_name").value.trim(),
+        symptoms: document.getElementById("f_symptoms").value.trim(),
+        diagnosis: document.getElementById("f_diagnosis").value.trim(),
+        prescription: document.getElementById("f_prescription").value.trim(),
+        notes: document.getElementById("f_notes").value.trim()
+      };
+
+      fetch(API + "/patients/" + encodeURIComponent(id) + "/consultations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data)
+      })
+        .then(function (res) {
+          if (res.status === 201) {
+            flash = "Consultation saved.";
+            loadPatient();          // history dobara laao
+            return;
+          }
+          if (res.status === 404) {
+            formError("Patient not found.");
+            return;
+          }
+          if (res.status === 422) {
+            res.json().then(function (body) {
+              var msgs = [];
+              if (Array.isArray(body.detail)) {
+                for (var i = 0; i < body.detail.length; i++) {
+                  var loc = body.detail[i].loc;
+                  msgs.push(esc(loc[loc.length - 1]) + ": " + esc(body.detail[i].msg));
+                }
+              } else {
+                msgs.push(esc(body.detail));
+              }
+              formError("Please fix:<br>" + msgs.join("<br>"));
+            });
+            return;
+          }
+          formError("Something went wrong. Server error " + res.status);
+        })
+        .catch(function () {
+          formError("Cannot reach server. Start the backend and try again.");
+        });
+    }
+
+    if (id === "") {
+      showError("No Patient ID", "Go back and scan a QR code or search by ID.");
+    } else {
+      loadPatient();
+    }
+  </script>
+</body>
+</html>

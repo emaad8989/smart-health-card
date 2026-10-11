@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Doctor Dashboard</title>
+  <style>
+    body { font-family: Arial; background: #eef5f9; margin: 0; }
+    .top { background: #1a6e8e; color: white; padding: 15px 25px; display: flex; justify-content: space-between; align-items: center; }
+    .top a { color: white; text-decoration: none; background: rgba(255,255,255,0.2); padding: 6px 12px; border-radius: 5px; }
+    .content { max-width: 450px; margin: 25px auto; padding: 0 15px; }
+    .card { background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+    h3 { margin-top: 0; color: #1a6e8e; }
+    input { width: 100%; padding: 8px; box-sizing: border-box; }
+    button { width: 100%; margin-top: 10px; padding: 10px; background: #1a6e8e; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
+    .scan { background: #2e9e5b; font-size: 18px; padding: 14px; }
+    .patient { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #ddd; }
+    .patient button { width: auto; margin: 0; padding: 6px 14px; font-size: 14px; }
+    #message { margin-top: 10px; color: #a31c1c; }
+    .small { font-size: 13px; color: #666; }
+  </style>
+</head>
+<body>
+
+  <div class="top">
+    <b>Welcome, Doctor</b>
+    <a href="login.html">Logout</a>
+  </div>
+
+  <div class="content">
+
+    <div class="card">
+      <h3>Scan Patient QR</h3>
+      <button class="scan" onclick="window.location.href='scan.html'">Scan QR Code</button>
+    </div>
+
+    <div class="card">
+      <h3>Search by Patient ID</h3>
+      <input type="text" id="searchBox" placeholder="Example: PAT001">
+      <button onclick="searchPatient()">Search</button>
+      <div id="message"></div>
+    </div>
+
+    <div class="card">
+      <h3>Sample Patients</h3>
+      <p class="small">Test data (fictional patients)</p>
+      <div class="patient"><span><b>PAT001</b> - Aarav Mehta</span><button onclick="openPatient('PAT001')">Open</button></div>
+      <div class="patient"><span><b>PAT002</b> - Diya Kapoor</span><button onclick="openPatient('PAT002')">Open</button></div>
+      <div class="patient"><span><b>PAT003</b> - Rohan Verma</span><button onclick="openPatient('PAT003')">Open</button></div>
+      <div class="patient"><span><b>PAT004</b> - Meera Nair</span><button onclick="openPatient('PAT004')">Open</button></div>
+      <div class="patient"><span><b>PAT005</b> - Kabir Singh</span><button onclick="openPatient('PAT005')">Open</button></div>
+    </div>
+
+  </div>
+
+  <script>
+    function searchPatient() {
+      var id = document.getElementById("searchBox").value.trim().toUpperCase();
+      if (id === "") {
+        document.getElementById("message").innerHTML = "Please type a Patient ID first.";
+      } else {
+        openPatient(id);
+      }
+    }
+
+    function openPatient(id) {
+      window.location.href = "patient.html?id=" + encodeURIComponent(id);
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scan QR Code</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    body { font-family: Arial; background: #eef5f9; display: flex; justify-content: center; padding: 30px 15px; }
+    .box { background: white; padding: 25px; border-radius: 10px; width: 350px; max-width: 100%; box-sizing: border-box; }
+    h2 { color: #1a6e8e; text-align: center; }
+    h4 { color: #1a6e8e; margin: 25px 0 5px; }
+    button { width: 100%; margin-top: 12px; padding: 10px; background: #1a6e8e; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
+    .back { background: #777; }
+    input[type=text] { width: 100%; padding: 8px; box-sizing: border-box; }
+    #reader { margin-top: 15px; }
+    #message { margin-top: 15px; padding: 10px; border-radius: 5px; text-align: center; display: none; }
+    .good { background: #e3f6e8; color: #1c6b34; }
+    .bad { background: #fde8e8; color: #a31c1c; }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h2>Scan Patient QR</h2>
+
+    <button onclick="startScan()">Start Camera</button>
+    <div id="reader"></div>
+
+    <h4>QR not working? Type the Patient ID</h4>
+    <input type="text" id="manualId" placeholder="Example: PAT001">
+    <button onclick="manualOpen()">Open Patient</button>
+
+    <h4>Or choose a picture of the QR</h4>
+    <input type="file" id="fileInput" accept="image/*">
+
+    <div id="message"></div>
+
+    <button class="back" onclick="window.location.href='dashboard.html'">Back to Dashboard</button>
+  </div>
+
+  <script>
+    var scanner = new Html5Qrcode("reader");
+    var scanning = false;
+    var message = document.getElementById("message");
+
+    function showMessage(type, text) {
+      message.style.display = "block";
+      message.className = type;
+      message.textContent = text;
+    }
+
+    function openPatient(id) {
+      window.location.href = "patient.html?id=" + encodeURIComponent(id);
+    }
+
+    // Text from the QR: trim spaces, make capitals, accept only IDs like PAT001
+    function handleResult(text) {
+      text = text.trim().toUpperCase();
+      if (/^PAT\d+$/.test(text)) {
+        openPatient(text);
+      } else {
+        showMessage("bad", "Invalid QR code. This is not a Smart Health Card.");
+      }
+    }
+
+    function manualOpen() {
+      var id = document.getElementById("manualId").value.trim().toUpperCase();
+      if (id === "") {
+        showMessage("bad", "Please type a Patient ID first.");
+      } else {
+        openPatient(id);
+      }
+    }
+
+    function stopScan() {
+      if (!scanning) { return Promise.resolve(); }
+      scanning = false;
+      return scanner.stop().catch(function () {});
+    }
+
+    function startScan() {
+      if (scanning) { return; }
+      message.style.display = "none";
+      scanning = true;
+      scanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 220 },
+        function (text) {
+          if (!scanning) { return; }   // ignore repeat reads while stopping
+          stopScan().then(function () { handleResult(text); });
+        }
+      ).catch(function () {
+        scanning = false;
+        showMessage("bad", "Could not open the camera. Allow camera permission, or type the Patient ID below.");
+      });
+    }
+
+    document.getElementById("fileInput").addEventListener("change", function (event) {
+      var input = event.target;
+      var file = input.files[0];
+      if (!file) { return; }
+      stopScan()
+        .then(function () { return scanner.scanFile(file, false); })
+        .then(function (text) { handleResult(text); })
+        .catch(function () { showMessage("bad", "No QR code found in that picture."); })
+        .then(function () { input.value = ""; });   // lets you pick the same file again
+    });
+  </script>
+</body>
+</html>
