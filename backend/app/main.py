@@ -1,25 +1,36 @@
+import os
+
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from app import models, schemas
 from app.database import Base, engine, get_db
+from app.seed import seed
 
 # Make sure the tables exist when the app starts.
 Base.metadata.create_all(bind=engine)
 
+# Load the synthetic sample patients if the database is empty (skipped if it already has data).
+if os.getenv("AUTO_SEED", "true").lower() == "true":
+    seed()
+
 app = FastAPI(
     title="Smart Health Card API",
     description="Backend for the QR-based patient health record system (prototype, synthetic data only).",
-    version="0.4.0",
+    version="0.5.0",
 )
 
-# Frontend addresses that are allowed to call this API (Vite's default port is 5173).
+# Frontend addresses allowed to call this API.
+# In the cloud, set ALLOWED_ORIGINS to the live website address (comma-separated for several).
+DEFAULT_ORIGINS = (
+    "http://localhost:5173,http://127.0.0.1:5173,"
+    "http://localhost:5500,http://127.0.0.1:5500"
+)
 ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "http://localhost:5500",
-    "http://127.0.0.1:5500",
+    origin.strip()
+    for origin in os.getenv("ALLOWED_ORIGINS", DEFAULT_ORIGINS).split(",")
+    if origin.strip()
 ]
 
 app.add_middleware(
