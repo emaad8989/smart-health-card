@@ -36,3 +36,8 @@ class PatientOut(BaseModel):
     allergies: str
     medical_conditions: str
     consultations: list[ConsultationOut]
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str

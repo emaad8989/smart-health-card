@@ -4,7 +4,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
-from app import models, schemas
+from app import auth, models, schemas
 from app.database import Base, engine, get_db
 from app.seed import seed
 
@@ -18,11 +18,10 @@ if os.getenv("AUTO_SEED", "true").lower() == "true":
 app = FastAPI(
     title="Smart Health Card API",
     description="Backend for the QR-based patient health record system (prototype, synthetic data only).",
-    version="0.5.0",
+    version="0.6.0",
 )
 
 # Frontend addresses allowed to call this API.
-# In the cloud, set ALLOWED_ORIGINS to the live website address (comma-separated for several).
 DEFAULT_ORIGINS = (
     "http://localhost:5173,http://127.0.0.1:5173,"
     "http://localhost:5500,http://127.0.0.1:5500"
@@ -58,7 +57,18 @@ def health_check():
     return {"status": "ok", "message": "Smart Health Card API is running"}
 
 
-@app.get("/patients/{patient_id}", response_model=schemas.PatientOut)
+@app.post("/login")
+def login(credentials: schemas.LoginRequest):
+    if not auth.check_login(credentials.username, credentials.password):
+        raise HTTPException(status_code=401, detail="Wrong username or password")
+    return {"access_token": auth.create_token(credentials.username), "token_type": "bearer"}
+
+
+@app.get(
+    "/patients/{patient_id}",
+    response_model=schemas.PatientOut,
+    dependencies=[Depends(auth.require_doctor)],
+)
 def get_patient(patient_id: str, db: Session = Depends(get_db)):
     return find_patient(db, patient_id)
 
@@ -67,6 +77,7 @@ def get_patient(patient_id: str, db: Session = Depends(get_db)):
     "/patients/{patient_id}/consultations",
     response_model=schemas.ConsultationOut,
     status_code=201,
+    dependencies=[Depends(auth.require_doctor)],
 )
 def add_consultation(
     patient_id: str,

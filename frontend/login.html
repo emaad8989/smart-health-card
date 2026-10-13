@@ -4,19 +4,87 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Doctor Login</title>
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
   <style>
     body { font-family: Arial; background: #eef5f9; display: flex; justify-content: center; padding: 60px 15px; }
-    .box { background: white; padding: 25px; border-radius: 10px; width: 350px; max-width: 100%; box-sizing: border-box; text-align: center; }
-    h2 { color: #1a6e8e; }
-    p { font-size: 13px; color: #666; }
-    button { width: 100%; margin-top: 15px; padding: 12px; background: #1a6e8e; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
+    .box { background: white; padding: 25px; border-radius: 10px; width: 350px; max-width: 100%; box-sizing: border-box; }
+    h2 { color: #1a6e8e; text-align: center; margin-top: 0; }
+    label { display: block; margin-top: 14px; font-size: 14px; }
+    input { width: 100%; padding: 10px; margin-top: 4px; box-sizing: border-box; font-size: 15px; }
+    button { width: 100%; margin-top: 20px; padding: 12px; background: #1a6e8e; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
+    button:disabled { background: #8fb3c2; cursor: wait; }
+    #message { margin-top: 15px; padding: 10px; border-radius: 5px; text-align: center; display: none; background: #fde8e8; color: #a31c1c; font-size: 14px; }
+    .note { font-size: 12px; color: #777; text-align: center; margin-top: 15px; }
   </style>
 </head>
 <body>
   <div class="box">
     <h2>Smart Health Card</h2>
-    <p>Doctor access (demo only - real login comes later)</p>
-    <button onclick="window.location.href='dashboard.html'">Enter as Doctor</button>
+    <form id="loginForm">
+      <label>Username</label>
+      <input type="text" id="username" autocomplete="username">
+      <label>Password</label>
+      <input type="password" id="password" autocomplete="current-password">
+      <button type="submit" id="loginBtn">Log in</button>
+    </form>
+    <div id="message"></div>
+    <p class="note">Demo system. All patient data is fictional.</p>
   </div>
+
+  <script>
+    var message = document.getElementById("message");
+    var button = document.getElementById("loginBtn");
+
+    function showMessage(text) {
+      message.style.display = "block";
+      message.textContent = text;
+    }
+
+    document.getElementById("loginForm").addEventListener("submit", function (event) {
+      event.preventDefault();
+      message.style.display = "none";
+
+      var username = document.getElementById("username").value.trim();
+      var password = document.getElementById("password").value;
+      if (username === "" || password === "") {
+        showMessage("Please enter your username and password.");
+        return;
+      }
+
+      button.disabled = true;
+      button.textContent = "Logging in... (the server may take up to a minute to wake up)";
+
+      fetch(API + "/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: username, password: password })
+      })
+        .then(function (res) {
+          if (res.status === 401) {
+            showMessage("Wrong username or password.");
+            return null;
+          }
+          if (!res.ok) {
+            showMessage("Something went wrong. Server error " + res.status);
+            return null;
+          }
+          return res.json();
+        })
+        .then(function (body) {
+          if (body && body.access_token) {
+            setToken(body.access_token);
+            window.location.href = "dashboard.html";
+          }
+        })
+        .catch(function () {
+          showMessage("Cannot reach server. Please try again in a minute.");
+        })
+        .then(function () {
+          button.disabled = false;
+          button.textContent = "Log in";
+        });
+    });
+  </script>
 </body>
 </html>

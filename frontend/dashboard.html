@@ -3,7 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Doctor Dashboard</title>
+    <title>Doctor Dashboard</title>
+  <script src="config.js"></script>
+  <script src="auth.js"></script>
+  <script>requireLogin();</script>
   <style>
     body { font-family: Arial; background: #eef5f9; margin: 0; }
     .top { background: #1a6e8e; color: white; padding: 15px 25px; display: flex; justify-content: space-between; align-items: center; }
@@ -24,7 +27,7 @@
 
   <div class="top">
     <b>Welcome, Doctor</b>
-    <a href="login.html">Logout</a>
+        <a href="#" onclick="logout(); return false;">Logout</a>
   </div>
 
   <div class="content">
