@@ -1,126 +1,111 @@
-from pathlib import Path
+"""Smart Health Card - two-QR card generator (synthetic data only).
 
+Front: identity + blue DOCTOR QR (patient ID only).
+Back : red EMERGENCY band + large emergency QR (signed link) + contact.
+Card : 85.6 x 54 mm at 300 DPI = 1011 x 638 px.
+"""
+import os
+import sys
+
+import qrcode
 from PIL import Image, ImageDraw, ImageFont
+from qrcode.constants import ERROR_CORRECT_H, ERROR_CORRECT_M
 
-from app.database import SessionLocal
-from app.generate_qr import make_qr_image
-from app.models import Patient
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Cards are saved in "card_designs" at the top of the project.
-OUTPUT_DIR = Path(__file__).resolve().parent.parent.parent / "card_designs"
+from app.seed import SAMPLE_PATIENTS          # noqa: E402
+from app.emergency_link import make_signature  # noqa: E402
 
-DPI = 300
-
-
-def mm(value: float) -> int:
-    """Convert millimetres to pixels at 300 DPI."""
-    return round(value / 25.4 * DPI)
-
-
-CARD_W, CARD_H = mm(85.6), mm(54)   # standard ID-card size (CR80)
-BLEED = mm(0)                        # change to mm(3) if the print shop asks for bleed
-
-# Colours
-TEAL = (0, 121, 107)
+SITE = "https://smart-health-card-bltg.onrender.com"
+W, H = 1011, 638
+BLUE = (21, 101, 192)
+RED = (198, 40, 40)
 DARK = (30, 30, 30)
-GREY = (110, 110, 110)
-LIGHT = (240, 245, 244)
-
-REGULAR_FONTS = ["C:/Windows/Fonts/arial.ttf"]
-BOLD_FONTS = ["C:/Windows/Fonts/arialbd.ttf"]
+GREY = (90, 90, 90)
+OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cards")
+os.makedirs(OUT, exist_ok=True)
 
 
-def load_font(size: int, bold: bool = False):
-    for path in (BOLD_FONTS if bold else REGULAR_FONTS):
+def font(size, bold=False):
+    name = "arialbd.ttf" if bold else "arial.ttf"
+    for path in (os.path.join("C:\\Windows\\Fonts", name), name):
         try:
             return ImageFont.truetype(path, size)
         except OSError:
             continue
-    return ImageFont.load_default(size)
+    return ImageFont.load_default()
 
 
-def fit_font(draw, text, max_width, start_size, bold=True):
-    """Shrink the font until the text fits inside max_width."""
-    size = start_size
-    font = load_font(size, bold)
-    while draw.textlength(text, font=font) > max_width and size > 20:
-        size -= 2
-        font = load_font(size, bold)
-    return font
+def make_qr(data, target, level):
+    """Black-on-white QR scaled to a whole number of pixels per module."""
+    qr = qrcode.QRCode(error_correction=level, border=0)
+    qr.add_data(data)
+    qr.make(fit=True)
+    n = len(qr.get_matrix())
+    box = max(1, target // n)
+    img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
+    img = img.resize((n * box, n * box), Image.NEAREST)
+    pad = box * 4  # quiet zone
+    tile = Image.new("RGB", (img.width + 2 * pad, img.height + 2 * pad), "white")
+    tile.paste(img, (pad, pad))
+    return tile
 
 
-def make_card(patient: Patient) -> Image.Image:
-    canvas_w, canvas_h = CARD_W + 2 * BLEED, CARD_H + 2 * BLEED
-    ox, oy = BLEED, BLEED  # where the real card starts inside the canvas
+def front(p):
+    card = Image.new("RGB", (W, H), "white")
+    d = ImageDraw.Draw(card)
+    d.rectangle([0, 0, W, 90], fill=BLUE)
+    d.text((30, 18), "SMART HEALTH CARD", font=font(46, True), fill="white")
 
-    card = Image.new("RGB", (canvas_w, canvas_h), "white")
-    draw = ImageDraw.Draw(card)
+    d.text((30, 130), p["full_name"], font=font(44, True), fill=DARK)
+    d.text((30, 200), "ID: " + p["patient_id"], font=font(36, True), fill=BLUE)
+    d.text((30, 255), "DOB: " + str(p["date_of_birth"]), font=font(30), fill=GREY)
+    d.text((30, 300), "Gender: " + str(p["gender"]), font=font(30), fill=GREY)
 
-    # Header band (runs to the canvas edge so bleed is covered)
-    draw.rectangle([0, 0, canvas_w, oy + 110], fill=TEAL)
-    draw.text((ox + 50, oy + 28), "SMART HEALTH CARD", font=load_font(50, True), fill="white")
+    d.rounded_rectangle([30, 400, 290, 520], radius=18, outline=RED, width=6)
+    d.text((50, 410), "BLOOD", font=font(26, True), fill=RED)
+    d.text((50, 445), str(p["blood_group"]), font=font(64, True), fill=RED)
 
-    # Footer band
-    draw.rectangle([0, oy + CARD_H - 60, canvas_w, canvas_h], fill=LIGHT)
-    draw.text(
-        (ox + 50, oy + CARD_H - 45),
-        "DEMO CARD - synthetic data only",
-        font=load_font(24),
-        fill=GREY,
-    )
-
-    # Left side: text details
-    left = ox + 50
-    text_width = 540
-    label_font = load_font(24)
-
-    draw.text((left, oy + 135), "NAME", font=label_font, fill=GREY)
-    name_font = fit_font(draw, patient.full_name, text_width, 54)
-    draw.text((left, oy + 165), patient.full_name, font=name_font, fill=DARK)
-
-    draw.text((left, oy + 260), "PATIENT ID", font=label_font, fill=GREY)
-    draw.text((left, oy + 290), patient.patient_id, font=load_font(68, True), fill=TEAL)
-
-    draw.text((left, oy + 395), "BLOOD GROUP", font=label_font, fill=GREY)
-    draw.text((left, oy + 425), patient.blood_group, font=load_font(52, True), fill=DARK)
-
-    # Right side: QR code
-    qr_size = 330
-    qr_x = ox + CARD_W - qr_size - 50
-    qr_y = oy + 130
-    qr_image = make_qr_image(patient.patient_id).get_image().convert("RGB")
-    qr_image = qr_image.resize((qr_size, qr_size), Image.NEAREST)
-    card.paste(qr_image, (qr_x, qr_y))
-
-    caption = "Scan to open record"
-    caption_font = load_font(24)
-    caption_width = draw.textlength(caption, font=caption_font)
-    draw.text(
-        (qr_x + (qr_size - caption_width) / 2, qr_y + qr_size + 10),
-        caption,
-        font=caption_font,
-        fill=GREY,
-    )
-
+    qr = make_qr(p["patient_id"], 290, ERROR_CORRECT_H)
+    x = W - qr.width - 30
+    card.paste(qr, (x, 120))
+    d.text((x + 10, 120 + qr.height + 5), "DOCTOR SCAN", font=font(30, True), fill=BLUE)
+    d.text((x + 10, 120 + qr.height + 42), "Use the hospital scanner", font=font(22), fill=GREY)
     return card
 
 
-def generate_cards():
-    OUTPUT_DIR.mkdir(exist_ok=True)
+def back(p):
+    card = Image.new("RGB", (W, H), "white")
+    d = ImageDraw.Draw(card)
+    d.rectangle([0, 0, W, 100], fill=RED)
+    d.text((30, 20), "EMERGENCY", font=font(60, True), fill="white")
 
-    db = SessionLocal()
-    try:
-        patients = db.query(Patient).order_by(Patient.patient_id).all()
-        for patient in patients:
-            card = make_card(patient)
-            card.save(OUTPUT_DIR / f"{patient.patient_id}_card.png", dpi=(DPI, DPI))
-            card.save(OUTPUT_DIR / f"{patient.patient_id}_card.pdf", "PDF", resolution=DPI)
-            print(f"Created card for {patient.patient_id} - {patient.full_name}")
-    finally:
-        db.close()
+    sig = make_signature(p["patient_id"])
+    url = f"{SITE}/emergency.html?id={p['patient_id']}&sig={sig}"
+    qr = make_qr(url, 340, ERROR_CORRECT_M)
+    card.paste(qr, (20, 120))
 
-    print(f"\nDone. {len(patients)} cards (PNG and PDF) saved in: {OUTPUT_DIR}")
+    x = 20 + qr.width + 30
+    d.text((x, 130), "In an emergency,", font=font(34, True), fill=DARK)
+    d.text((x, 175), "scan with your", font=font(34, True), fill=DARK)
+    d.text((x, 220), "phone camera", font=font(34, True), fill=DARK)
+    d.text((x, 285), "Shows blood group,", font=font(26), fill=GREY)
+    d.text((x, 320), "allergies & contact.", font=font(26), fill=GREY)
+    d.text((x, 360), "No login needed.", font=font(26), fill=GREY)
+
+    d.line([30, 540, W - 30, 540], fill=RED, width=3)
+    contact = f"{p.get('emergency_contact_name', '')}   {p.get('emergency_contact_phone', '')}"
+    d.text((30, 555), "Emergency contact: " + contact.strip(), font=font(26, True), fill=DARK)
+    d.text((30, 595), p["full_name"] + "  |  " + p["patient_id"], font=font(22), fill=GREY)
+    return card
 
 
-if __name__ == "__main__":
-    generate_cards()
+for p in SAMPLE_PATIENTS:
+    f, b = front(p), back(p)
+    f.save(os.path.join(OUT, f"{p['patient_id']}_front.png"), dpi=(300, 300))
+    b.save(os.path.join(OUT, f"{p['patient_id']}_back.png"), dpi=(300, 300))
+    f.save(os.path.join(OUT, f"{p['patient_id']}_card.pdf"), save_all=True,
+           append_images=[b], resolution=300)
+    print("Done:", p["patient_id"])
+
+print("Cards saved in:", OUT)
