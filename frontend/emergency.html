@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <meta name="referrer" content="no-referrer">
+  <title>Emergency Medical Info</title>
+  <script src="config.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: Arial, Helvetica, sans-serif; background: #fff5f5; color: #1f1f1f; }
+    .banner { background: #c62828; color: #fff; text-align: center; padding: 18px 12px; }
+    .banner h1 { margin: 0; font-size: 1.35rem; letter-spacing: 1px; }
+    .banner p { margin: 6px 0 0 0; font-size: 0.95rem; opacity: 0.95; }
+    #page { max-width: 520px; margin: 0 auto; padding: 16px; }
+    .box { background: #fff; border: 2px solid #f0c4c4; border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+    .label { font-size: 0.8rem; font-weight: bold; text-transform: uppercase; color: #8a4b4b; letter-spacing: 0.5px; }
+    .value { font-size: 1.25rem; font-weight: bold; margin-top: 4px; word-wrap: break-word; }
+    .blood { font-size: 3rem; color: #c62828; text-align: center; margin-top: 2px; }
+    .allergy-alert { background: #c62828; color: #fff; border-color: #c62828; }
+    .allergy-alert .label { color: #ffd6d6; }
+    .allergy-ok { background: #e8f5e9; border-color: #b9dcbc; }
+    .call-btn { display: block; background: #1b7f3b; color: #fff; text-align: center; text-decoration: none;
+                font-size: 1.3rem; font-weight: bold; padding: 16px; border-radius: 10px; margin-top: 12px; }
+    .msg { text-align: center; padding: 28px 12px; font-size: 1.05rem; }
+    .msg.error { color: #b42318; font-weight: bold; }
+    .small { text-align: center; font-size: 0.85rem; color: #6b6b6b; margin: 18px 0; }
+    .small a { color: #0b6bcb; }
+  </style>
+</head>
+<body>
+  <div class="banner">
+    <h1>EMERGENCY MEDICAL INFO</h1>
+    <p>Smart Health Card</p>
+  </div>
+
+  <div id="page">
+    <div class="msg" id="status">Loading emergency details...</div>
+    <div id="content"></div>
+    <div class="small">
+      Doctors: <a href="login.html">log in</a> to see the full medical record.
+    </div>
+  </div>
+
+  <script>
+    var statusBox = document.getElementById("status");
+    var content = document.getElementById("content");
+
+    // Escape text so it is never treated as HTML
+    function esc(value) {
+      if (value === null || value === undefined) return "";
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function showMessage(text, isError) {
+      statusBox.style.display = "block";
+      statusBox.className = isError ? "msg error" : "msg";
+      statusBox.textContent = text;
+    }
+
+    function showInfo(d) {
+      statusBox.style.display = "none";
+
+      var allergyText = (d.allergies || "").trim();
+      var noAllergy = ["", "none", "none known", "nil"].indexOf(allergyText.toLowerCase()) !== -1;
+      var conditionsText = (d.medical_conditions || "").trim();
+      if (conditionsText === "" || conditionsText.toLowerCase() === "none") {
+        conditionsText = "None recorded";
+      }
+
+      var allergyBox = noAllergy
+        ? '<div class="box allergy-ok"><div class="label">Allergies</div><div class="value">No known allergies</div></div>'
+        : '<div class="box allergy-alert"><div class="label">&#9888; Allergies</div><div class="value">' + esc(allergyText) + '</div></div>';
+
+      // Keep only digits and + for the phone link
+      var phoneDigits = (d.emergency_contact_phone || "").replace(/[^0-9+]/g, "");
+      var callButton = phoneDigits
+        ? '<a class="call-btn" href="tel:' + phoneDigits + '">&#128222; Call ' + esc(d.emergency_contact_phone) + '</a>'
+        : '';
+
+      content.innerHTML =
+        '<div class="box">' +
+          '<div class="label" style="text-align:center;">Blood group</div>' +
+          '<div class="value blood">' + esc(d.blood_group) + '</div>' +
+        '</div>' +
+        allergyBox +
+        '<div class="box">' +
+          '<div class="label">Medical conditions</div>' +
+          '<div class="value">' + esc(conditionsText) + '</div>' +
+        '</div>' +
+        '<div class="box">' +
+          '<div class="label">Emergency contact</div>' +
+          '<div class="value">' + esc(d.emergency_contact_name || "Not recorded") + '</div>' +
+          callButton +
+        '</div>' +
+        '<div class="small">Patient ID: ' + esc(d.patient_id) + '</div>';
+    }
+
+    var tries = 0;
+
+    async function load(id, sig) {
+      tries++;
+      try {
+        var url = API + "/emergency/" + encodeURIComponent(id) + "?sig=" + encodeURIComponent(sig);
+        var res = await fetch(url);
+
+        if (res.status === 403) {
+          showMessage("This emergency link is not valid. Please use the emergency QR code printed on the card.", true);
+          return;
+        }
+        if (res.status === 404) {
+          showMessage("No record found for this card.", true);
+          return;
+        }
+        if (!res.ok) {
+          showMessage("Server problem (" + res.status + "). Please try again.", true);
+          return;
+        }
+        showInfo(await res.json());
+      } catch (err) {
+        // The free server may be asleep: try a few times before giving up
+        if (tries < 4) {
+          showMessage("Waking up the server... please wait (attempt " + tries + " of 3).", false);
+          setTimeout(function () { load(id, sig); }, 8000);
+        } else {
+          showMessage("Cannot reach the server. Check the internet connection and refresh the page.", true);
+        }
+      }
+    }
+
+    var params = new URLSearchParams(window.location.search);
+    var id = (params.get("id") || "").trim();
+    var sig = (params.get("sig") || "").trim();
+
+    if (!id || !sig) {
+      showMessage("No card details found. Scan the emergency QR code printed on the card.", true);
+    } else {
+      load(id, sig);
+    }
+  </script>
+</body>
+</html>

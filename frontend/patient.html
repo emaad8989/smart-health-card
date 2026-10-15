@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Patient Record - Smart Health Card</title>
 
-  <!-- STAGE 7: config + auth scripts, then require login -->
   <script src="config.js"></script>
   <script src="auth.js"></script>
   <script>requireLogin();</script>
@@ -22,11 +21,14 @@
     .muted { color: #6b7a8c; font-size: 0.9rem; }
     .row { margin: 6px 0; }
     .label { font-weight: bold; }
-    .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.85rem; font-weight: bold; }
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.85rem; font-weight: bold; margin-right: 6px; }
     .badge.red { background: #fde2e2; color: #b42318; }
     .badge.green { background: #dff5e3; color: #1a7f37; }
+    .badge.orange { background: #fff0d6; color: #a15c00; }
+    .badge.blue { background: #dbeafe; color: #1d4ed8; }
     .btn { background: #0b6bcb; color: #fff; border: 0; padding: 10px 16px; border-radius: 6px; font-size: 1rem; cursor: pointer; }
     .btn.secondary { background: #e4e9ef; color: #1f2d3d; }
+    .btn.danger { background: #c62828; }
     .btn:disabled { opacity: 0.6; cursor: not-allowed; }
     label { display: block; margin-top: 10px; font-weight: bold; font-size: 0.9rem; }
     input, textarea { width: 100%; padding: 9px; margin-top: 4px; border: 1px solid #c3ccd6; border-radius: 6px; font-size: 1rem; font-family: inherit; }
@@ -35,6 +37,12 @@
     .consult { border-left: 4px solid #0b6bcb; padding: 8px 12px; margin-bottom: 12px; background: #f7fafd; border-radius: 0 6px 6px 0; }
     .consult .date { font-weight: bold; }
     .empty { color: #6b7a8c; font-style: italic; }
+    .restricted-box { border: 2px solid #c62828; background: #fff5f5; }
+    .restricted-box h2 { color: #c62828; }
+    .override-banner { background: #fff0d6; border: 2px solid #e0a030; color: #7a4b00; padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; font-weight: bold; }
+    .log-row { border-bottom: 1px solid #e4e9ef; padding: 8px 0; font-size: 0.92rem; }
+    .log-row:last-child { border-bottom: 0; }
+    .log-reason { margin-top: 3px; color: #444; font-style: italic; }
   </style>
 </head>
 <body>
@@ -49,6 +57,8 @@
   <script>
     var content = document.getElementById("content");
     var currentId = "";
+    var currentPatient = null;
+    var openedByOverride = false;
 
     // Escape text so it can never be treated as HTML
     function esc(value) {
@@ -74,8 +84,15 @@
 
     async function loadPatient(id) {
       try {
-        // STAGE 7: authFetch instead of fetch
         var res = await authFetch(API + "/patients/" + encodeURIComponent(id));
+
+        if (res.status === 403) {
+          var data = await res.json().catch(function () { return {}; });
+          if (data.detail === "RESTRICTED") {
+            showRestricted(id);
+            return;
+          }
+        }
         if (res.status === 404) {
           showError("No patient found with ID " + id + ".");
           return;
@@ -84,19 +101,90 @@
           showError("Server problem (" + res.status + "). Please try again.");
           return;
         }
-        var patient = await res.json();
-        showPatient(patient);
+        currentPatient = await res.json();
+        openedByOverride = false;
+        showPatient(currentPatient);
       } catch (err) {
         showError("Cannot reach server. If the site was idle it may take up to a minute to wake up - try again shortly.");
       }
     }
 
+    // ---------- Restricted record: emergency override ----------
+    function showRestricted(id) {
+      content.innerHTML =
+        '<div class="card restricted-box">' +
+          '<h2>&#128274; Restricted record</h2>' +
+          '<div class="row">This record is protected. It can only be opened in a medical emergency, ' +
+          'and the reason you give will be <b>permanently recorded</b> in the access log.</div>' +
+          '<form id="overrideForm" novalidate>' +
+            '<label for="o_reason">Reason for emergency access (at least 10 characters)</label>' +
+            '<textarea id="o_reason" rows="3" placeholder="e.g. Patient unconscious in ER, needs full history"></textarea>' +
+            '<div id="overrideMsg"></div>' +
+            '<div class="form-actions">' +
+              '<button type="submit" class="btn danger" id="overrideBtn">Emergency override</button>' +
+              '<a class="btn secondary" style="text-decoration:none;" href="dashboard.html">Cancel</a>' +
+            '</div>' +
+          '</form>' +
+        '</div>';
+
+      document.getElementById("overrideForm").addEventListener("submit", function (e) {
+        e.preventDefault();
+        doOverride(id);
+      });
+    }
+
+    function overrideError(text) {
+      var box = document.getElementById("overrideMsg");
+      box.innerHTML = '<div class="error">' + esc(text) + '</div>';
+    }
+
+    async function doOverride(id) {
+      var reason = document.getElementById("o_reason").value.trim();
+      if (reason.length < 10) {
+        overrideError("Please type a reason of at least 10 characters.");
+        return;
+      }
+
+      var btn = document.getElementById("overrideBtn");
+      btn.disabled = true;
+      btn.textContent = "Opening...";
+
+      try {
+        var res = await authFetch(API + "/patients/" + encodeURIComponent(id) + "/override", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason: reason })
+        });
+
+        if (res.ok) {
+          currentPatient = await res.json();
+          openedByOverride = true;
+          showPatient(currentPatient);
+          return;
+        }
+        if (res.status === 422) {
+          overrideError("Please type a reason of at least 10 characters.");
+        } else if (res.status === 404) {
+          overrideError("Patient not found.");
+        } else {
+          overrideError("Server problem (" + res.status + "). Please try again.");
+        }
+      } catch (err) {
+        overrideError("Cannot reach server. Please try again.");
+      }
+
+      btn.disabled = false;
+      btn.textContent = "Emergency override";
+    }
+
+    // ---------- Patient record ----------
     function showPatient(p) {
       var allergyText = (p.allergies || "").trim();
       var noAllergy = ["", "none", "none known", "nil"].indexOf(allergyText.toLowerCase()) !== -1;
       var allergyBadge = noAllergy
         ? '<span class="badge green">No known allergies</span>'
         : '<span class="badge red">Allergy: ' + esc(allergyText) + '</span>';
+      var restrictedBadge = p.restricted ? '<span class="badge orange">&#128274; Restricted record</span>' : '';
 
       var consultations = p.consultations || [];
       var historyHtml = "";
@@ -115,11 +203,16 @@
         });
       }
 
+      var banner = openedByOverride
+        ? '<div class="override-banner">&#9888; Opened with emergency override. This access and your reason have been recorded in the access log.</div>'
+        : '';
+
       content.innerHTML =
+        banner +
         '<div class="card">' +
           '<h1>' + esc(p.full_name) + '</h1>' +
           '<div class="muted">Patient ID: ' + esc(p.patient_id) + '</div>' +
-          '<div class="row" style="margin-top:10px;">' + allergyBadge + '</div>' +
+          '<div class="row" style="margin-top:10px;">' + allergyBadge + restrictedBadge + '</div>' +
           '<div class="row"><span class="label">Date of birth:</span> ' + esc(p.date_of_birth) + '</div>' +
           '<div class="row"><span class="label">Gender:</span> ' + esc(p.gender) + '</div>' +
           '<div class="row"><span class="label">Blood group:</span> ' + esc(p.blood_group) + '</div>' +
@@ -151,6 +244,13 @@
         '<div class="card">' +
           '<h2>Medical History</h2>' +
           historyHtml +
+        '</div>' +
+
+        '<div class="card">' +
+          '<h2>Access log</h2>' +
+          '<div class="muted">Who has opened this record, and how.</div>' +
+          '<div style="margin-top:10px;"><button class="btn secondary" id="logBtn">Show access log</button></div>' +
+          '<div id="logBox"></div>' +
         '</div>';
 
       var form = document.getElementById("consultForm");
@@ -170,8 +270,47 @@
       });
 
       form.addEventListener("submit", saveConsultation);
+      document.getElementById("logBtn").addEventListener("click", loadAccessLog);
     }
 
+    // ---------- Access log ----------
+    function logBadge(type) {
+      if (type === "break_glass") return '<span class="badge red">Emergency override</span>';
+      if (type === "emergency") return '<span class="badge orange">Emergency QR scan</span>';
+      return '<span class="badge blue">Doctor view</span>';
+    }
+
+    async function loadAccessLog() {
+      var box = document.getElementById("logBox");
+      box.innerHTML = '<div class="muted" style="margin-top:10px;">Loading...</div>';
+      try {
+        var res = await authFetch(API + "/patients/" + encodeURIComponent(currentId) + "/access-log");
+        if (!res.ok) {
+          box.innerHTML = '<div class="error">Could not load the access log (' + res.status + ').</div>';
+          return;
+        }
+        var rows = await res.json();
+        if (rows.length === 0) {
+          box.innerHTML = '<div class="empty" style="margin-top:10px;">No access recorded yet.</div>';
+          return;
+        }
+        var html = '<div style="margin-top:10px;">';
+        rows.forEach(function (r) {
+          html +=
+            '<div class="log-row">' +
+              logBadge(r.access_type) + ' ' + esc(niceDate(r.accessed_at)) +
+              '<div class="muted">' + esc(r.accessed_by) + '</div>' +
+              (r.reason ? '<div class="log-reason">Reason: ' + esc(r.reason) + '</div>' : '') +
+            '</div>';
+        });
+        html += '</div>';
+        box.innerHTML = html;
+      } catch (err) {
+        box.innerHTML = '<div class="error">Cannot reach server.</div>';
+      }
+    }
+
+    // ---------- Add consultation ----------
     function formError(text) {
       var box = document.getElementById("formMsg");
       box.innerHTML = '<div class="error">' + esc(text) + '</div>';
@@ -197,7 +336,6 @@
       saveBtn.textContent = "Saving...";
 
       try {
-        // STAGE 7: authFetch instead of fetch
         var res = await authFetch(API + "/patients/" + encodeURIComponent(currentId) + "/consultations", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -210,8 +348,11 @@
           })
         });
 
-        if (res.status === 201 || res.ok) {
-          await loadPatient(currentId);
+        if (res.ok) {
+          // Add the new consultation to the top of the list without reloading the record
+          var saved = await res.json();
+          currentPatient.consultations.unshift(saved);
+          showPatient(currentPatient);
           return;
         }
         if (res.status === 404) {
@@ -241,8 +382,8 @@
     if (!id) {
       showError("No patient ID given. Go back and scan a card.");
     } else {
-      currentId = id;
-      loadPatient(id);
+      currentId = id.toUpperCase();
+      loadPatient(currentId);
     }
   </script>
 </body>

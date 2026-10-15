@@ -35,9 +35,38 @@ class PatientOut(BaseModel):
     blood_group: str
     allergies: str
     medical_conditions: str
+    restricted: bool = False
     consultations: list[ConsultationOut]
 
 
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+
+class EmergencyOut(BaseModel):
+    """Only life-critical details. Shown by the emergency QR, no login needed."""
+
+    patient_id: str
+    blood_group: str
+    allergies: str
+    medical_conditions: str
+    emergency_contact_name: str
+    emergency_contact_phone: str
+
+
+class AccessLogOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    patient_id: str
+    access_type: str
+    accessed_by: str
+    reason: str
+    accessed_at: datetime
+
+
+class OverrideRequest(BaseModel):
+    """The doctor's reason for opening a restricted record in an emergency."""
+
+    reason: str = Field(min_length=10, max_length=500)

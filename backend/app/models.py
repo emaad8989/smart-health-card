@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, String, Text
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -17,6 +17,9 @@ class Patient(Base):
     blood_group: Mapped[str] = mapped_column(String(5))
     allergies: Mapped[str] = mapped_column(Text, default="")
     medical_conditions: Mapped[str] = mapped_column(Text, default="")
+    emergency_contact_name: Mapped[str] = mapped_column(String(100), default="")
+    emergency_contact_phone: Mapped[str] = mapped_column(String(20), default="")
+    restricted: Mapped[bool] = mapped_column(Boolean, default=False)  # needs emergency override to open
 
     consultations: Mapped[list["Consultation"]] = relationship(
         back_populates="patient",
@@ -37,3 +40,16 @@ class Consultation(Base):
     notes: Mapped[str] = mapped_column(Text, default="")
 
     patient: Mapped["Patient"] = relationship(back_populates="consultations")
+
+
+class AccessLog(Base):
+    """One row every time a patient's record is opened."""
+
+    __tablename__ = "access_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    patient_id: Mapped[str] = mapped_column(String(20), index=True)  # e.g. "PAT001"
+    access_type: Mapped[str] = mapped_column(String(20))  # "emergency", "doctor", "break_glass"
+    accessed_by: Mapped[str] = mapped_column(String(100), default="")
+    reason: Mapped[str] = mapped_column(Text, default="")
+    accessed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

@@ -13,6 +13,8 @@ SAMPLE_PATIENTS = [
         "blood_group": "B+",
         "allergies": "Penicillin",
         "medical_conditions": "Type 2 Diabetes",
+        "emergency_contact_name": "Neha Mehta (Wife)",
+        "emergency_contact_phone": "+91 00000 00001",
         "consultations": [
             {
                 "doctor_name": "Dr. Sharma",
@@ -32,6 +34,8 @@ SAMPLE_PATIENTS = [
         "blood_group": "O+",
         "allergies": "None known",
         "medical_conditions": "Asthma",
+        "emergency_contact_name": "Arjun Kapoor (Husband)",
+        "emergency_contact_phone": "+91 00000 00002",
         "consultations": [
             {
                 "doctor_name": "Dr. Rao",
@@ -59,6 +63,9 @@ SAMPLE_PATIENTS = [
         "blood_group": "A-",
         "allergies": "Peanuts, Sulfa drugs",
         "medical_conditions": "Hypertension",
+        "emergency_contact_name": "Sunita Verma (Wife)",
+        "emergency_contact_phone": "+91 00000 00003",
+        "restricted": True,
         "consultations": [
             {
                 "doctor_name": "Dr. Iyer",
@@ -78,6 +85,8 @@ SAMPLE_PATIENTS = [
         "blood_group": "AB+",
         "allergies": "None known",
         "medical_conditions": "None",
+        "emergency_contact_name": "Gopal Nair (Father)",
+        "emergency_contact_phone": "+91 00000 00004",
         "consultations": [],
     },
     {
@@ -88,6 +97,8 @@ SAMPLE_PATIENTS = [
         "blood_group": "O-",
         "allergies": "Latex",
         "medical_conditions": "Arthritis, High cholesterol",
+        "emergency_contact_name": "Simran Singh (Daughter)",
+        "emergency_contact_phone": "+91 00000 00005",
         "consultations": [
             {
                 "doctor_name": "Dr. Sharma",
