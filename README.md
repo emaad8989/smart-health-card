@@ -1,151 +1,91 @@
-# Smart Health Card
+# Smart Health Card: QR-Based Patient Health Record System
 
-QR-based patient health record system (hackathon prototype).
-**All data is synthetic. Never add real patient data.**
+A working prototype for the Smart India Hackathon. A patient carries a printed card with QR codes. A doctor scans the card and instantly sees the patient's record. In an emergency, anyone can scan a separate emergency QR with a normal phone camera to see life-critical details, with no app and no login.
 
-| Part | Tech | Owner |
-|---|---|---|
-| Backend and database | Python, FastAPI, SQLite | Emaad |
-| Frontend | React, Vite | Ayush |
+> All data in this prototype is **synthetic** (fictional patients PAT001 to PAT005). It is not connected to the official ABDM / ABHA network.
 
-## How it works
+## Live demo
 
-1. Each sample patient has an ID such as `PAT001`.
-2. The QR code contains that plain patient ID (nothing else).
-3. The frontend scans the QR code and gets the ID.
-4. The frontend calls `GET /patients/{patient_id}` to show the record.
-5. A doctor adds a visit with `POST /patients/{patient_id}/consultations`.
+- Website: https://smart-health-card-bltg.onrender.com
+- API documentation: https://smart-health-card-api.onrender.com/docs
 
-## Run the backend (Windows PowerShell)
+The free hosting sleeps when idle, so the first load can take up to a minute.
 
-Needs Python 3.10+ and Git. Do this once:
+## Key features
+
+- **Doctor login:** username and password, signed tokens (JWT) that expire after 8 hours.
+- **QR scanning:** the doctor QR contains only the patient ID, no medical data.
+- **Patient record:** profile, blood group, allergies (highlighted in red), conditions and consultation history.
+- **Add consultation:** doctor, symptoms, diagnosis, prescription and notes are saved permanently.
+- **Emergency QR page (no login):** shows only blood group, allergies, major conditions and a tap-to-call emergency contact. The link carries a server-made signature (HMAC), so patient IDs cannot be guessed.
+- **Access log:** every emergency scan, doctor view and override is recorded with the time.
+- **Restricted records and emergency override:** a restricted record cannot be opened normally. A doctor must type a reason, which is permanently recorded in the access log.
+
+## Technology
+
+| Part | Technology |
+|---|---|
+| Backend | Python, FastAPI, SQLAlchemy, Pydantic |
+| Database | SQLite (local), PostgreSQL on Neon (online) |
+| Frontend | Plain HTML, CSS, JavaScript, html5-qrcode |
+| Authentication | JWT (PyJWT), HMAC-signed emergency links |
+| Hosting | Render (API and website) |
+| QR and cards | Python `qrcode` library, 85.6 x 54 mm card layout at 300 DPI |
+
+## Project structure
+
+```
+smart-health-card/
+  backend/
+    app/
+      main.py            API endpoints
+      models.py          database tables
+      schemas.py         request and response shapes
+      auth.py            doctor login and tokens
+      emergency_link.py  signed emergency links
+      access_log.py      access log helper
+      migrate.py         adds new columns to older databases
+      seed.py            synthetic sample patients
+      generate_qr.py     QR code generator
+      generate_cards.py  printable card generator
+    requirements.txt
+  frontend/
+    login.html  dashboard.html  scan.html
+    patient.html  emergency.html
+    auth.js  config.js
+```
+
+## Run it locally
+
+Requirements: Python 3.12 or newer, Git, VS Code with the Live Server extension.
+
+Backend:
 
 ```powershell
-git clone https://github.com/emaad8989/smart-health-card.git
-cd smart-health-card\backend
+cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-python -m app.seed
-```
-
-Every time you work:
-
-```powershell
-cd smart-health-card\backend
-.\.venv\Scripts\Activate.ps1
 uvicorn app.main:app --reload
 ```
 
-- API: http://127.0.0.1:8000
-- Interactive docs (Swagger): http://127.0.0.1:8000/docs
+The API runs at http://127.0.0.1:8000 (documentation at `/docs`). Locally, a development login is used. On the hosted version the login and secret key are set as environment variables and are never stored in the code.
 
-If PowerShell blocks the activate script, run this once:
-`Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned`
+Frontend: open the `frontend` folder in VS Code, right-click `login.html` and choose **Open with Live Server**.
 
-## Sample patients
+## Configuration (hosted version)
 
-| ID | Name | Blood group | Notes |
-|---|---|---|---|
-| PAT001 | Aarav Mehta | B+ | 1 consultation |
-| PAT002 | Diya Kapoor | O+ | 2 consultations |
-| PAT003 | Rohan Verma | A- | 1 consultation |
-| PAT004 | Meera Nair | AB+ | no consultations (empty history) |
-| PAT005 | Kabir Singh | O- | 1 consultation |
+Set these as environment variables on the server (never commit them):
+`DATABASE_URL`, `ALLOWED_ORIGINS`, `DOCTOR_USERNAME`, `DOCTOR_PASSWORD`, `SECRET_KEY`.
 
-## API reference
+## Limitations and future scope
 
-### GET /health
+- One shared doctor login, with no individual accounts or roles yet.
+- No patient-side consent or OTP verification yet.
+- No integration with the official ABDM / ABHA systems.
+- Data is not encrypted at rest.
+- Planned: individual doctor, nurse and admin accounts, patient consent, ABDM sandbox integration, queue and token system, document uploads, drug-allergy alerts.
 
-Checks the server is running.
+## Team
 
-```json
-{"status": "ok", "message": "Smart Health Card API is running"}
-```
-
-### GET /patients/{patient_id}
-
-Example: `GET http://127.0.0.1:8000/patients/PAT002`
-
-The ID is not case sensitive and surrounding spaces are ignored.
-Consultations are sorted newest first.
-
-Response `200`:
-
-```json
-{
-  "patient_id": "PAT002",
-  "full_name": "Diya Kapoor",
-  "date_of_birth": "1985-11-03",
-  "gender": "Female",
-  "blood_group": "O+",
-  "allergies": "None known",
-  "medical_conditions": "Asthma",
-  "consultations": [
-    {
-      "id": 3,
-      "doctor_name": "Dr. Rao",
-      "consultation_date": "2026-06-02T11:15:00",
-      "symptoms": "Follow-up, no wheezing",
-      "diagnosis": "Asthma well controlled",
-      "prescription": "Continue inhaler",
-      "notes": "Next review in 6 months"
-    }
-  ]
-}
-```
-
-Unknown ID returns `404`:
-
-```json
-{"detail": "Patient PAT999 not found"}
-```
-
-### POST /patients/{patient_id}/consultations
-
-Adds a consultation. The server sets the date and ID.
-
-Request body (JSON):
-
-```json
-{
-  "doctor_name": "Dr. Sharma",
-  "symptoms": "Sore throat, mild fever",
-  "diagnosis": "Viral throat infection",
-  "prescription": "Rest, warm fluids",
-  "notes": "Return if no improvement in 5 days"
-}
-```
-
-- `doctor_name`, `symptoms` and `diagnosis` are required and cannot be empty.
-- `prescription` and `notes` are optional (default is empty text).
-
-Response `201`: the saved consultation, including its `id` and `consultation_date`.
-
-Errors:
-
-| Code | Meaning |
-|---|---|
-| 404 | Patient ID does not exist |
-| 422 | Missing or empty required field (the response says which one) |
-
-## Frontend notes
-
-- The backend allows requests from `http://localhost:5173` and `http://127.0.0.1:5173`
-  (Vite's default). If your app runs on another port, tell Emaad.
-- Example call from React:
-
-```js
-const res = await fetch(`http://127.0.0.1:8000/patients/${patientId}`);
-if (res.status === 404) {
-  // show "Patient not found"
-}
-const patient = await res.json();
-```
-
-## Team workflow
-
-- Emaad edits only `backend/`. Ayush edits only `frontend/`.
-- Run `git pull` before you start work.
-- Commit small and often, then `git push` at the end of each session.
-- The database file is not in Git. Everyone creates theirs with `python -m app.seed`.
+Emaad (team leader: backend, database, API, integration, testing) and Ayush (frontend).
